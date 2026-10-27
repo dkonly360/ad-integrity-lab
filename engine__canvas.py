@@ -27,6 +27,7 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
+from . import browser
 from .fetch import ARTIFACT_DIR, HUMAN_UA, Capture, ocr_image
 
 RENDER_TIMEOUT = 45
@@ -212,7 +213,21 @@ def build_text_clone(cap: Capture) -> dict:
 # measurement
 # --------------------------------------------------------------------------
 
+# Each clone flags itself on <body> once its canvas is painted.
+_READY = "body[data-canvas-ready], body[data-cv-drawn], body[data-cv-err]"
+
+
 def _chromium_measure(target: str, slug: str) -> tuple[str, str, str]:
+    shot = ARTIFACT_DIR / f"{slug}.measured.png"
+    url = target if "://" in target else Path(target).resolve().as_uri()
+    try:
+        return browser.render(url, shot, HUMAN_UA, ready_selector=_READY)
+    except browser.BrowserUnavailable as exc:
+        dom, path, err = _chromium_measure_cli(target, slug)
+        return dom, path, (f"shared browser unavailable ({exc}); " + err).strip("; ")
+
+
+def _chromium_measure_cli(target: str, slug: str) -> tuple[str, str, str]:
     profile = tempfile.mkdtemp(prefix="lab-meas-")
     shot = ARTIFACT_DIR / f"{slug}.measured.png"
     url = target if "://" in target else Path(target).resolve().as_uri()
@@ -252,7 +267,7 @@ def _term_survival(terms: list[str], text: str) -> dict:
     t = (text or "").lower()
     found = [x for x in terms if x in t]
     return {
-        "terms_checked": len(years := terms),
+        "terms_checked": len(terms),
         "terms_found": found,
         "survival": round(len(found) / max(len(terms), 1), 3),
     }
@@ -301,7 +316,8 @@ class CanvasExperiment:
     numbers: dict
 
 
-def run_experiment(cap: Capture, terms: list[str]) -> CanvasExperiment:
+def run_experiment(cap: Capture, terms: list[str], on_stage=None) -> CanvasExperiment:
+    stage = on_stage or (lambda _msg: None)
     baseline = {
         "dom_chars": len(cap.dom_text or ""),
         "ocr_chars": len(cap.ocr_text or ""),
@@ -312,10 +328,12 @@ def run_experiment(cap: Capture, terms: list[str]) -> CanvasExperiment:
     img_build = build_image_clone(cap)
     txt_build = build_text_clone(cap)
 
+    stage("measuring image-mode clone (DOM + OCR)")
     img_meas = measure_clone(img_build["path"], terms, f"{cap.slugs}-img") if img_build.get("ok") else {
         "error": img_build.get("error"), "by_dom": {"survival": 0}, "by_ocr": {"survival": 0},
         "dom_chars": 0, "ocr_chars": 0,
     }
+    stage("measuring text-mode clone (DOM + OCR)")
     txt_meas = measure_clone(txt_build["path"], terms, f"{cap.slugs}-txt") if txt_build.get("ok") else {
         "error": txt_build.get("error"), "by_dom": {"survival": 0}, "by_ocr": {"survival": 0},
         "dom_chars": 0, "ocr_chars": 0,

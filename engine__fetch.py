@@ -29,6 +29,8 @@ from urllib.parse import urlparse, urlunparse
 import httpx
 from bs4 import BeautifulSoup
 
+from . import browser
+
 ARTIFACT_DIR = Path(__file__).resolve().parent.parent / "artifacts"
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -212,7 +214,17 @@ async def _http_get(url: str, ua: str, client: httpx.AsyncClient) -> tuple[str, 
 
 
 def _chromium_render(url: str, slug: str) -> tuple[str, str, str]:
-    """Run Chromium twice conceptually: dump DOM and save a screenshot."""
+    """Render once in the shared browser: DOM and screenshot from one load."""
+    shot = ARTIFACT_DIR / f"{slug}.png"
+    try:
+        return browser.render(url, shot, HUMAN_UA)
+    except browser.BrowserUnavailable as exc:
+        dom, path, err = _chromium_render_cli(url, slug)
+        return dom, path, (f"shared browser unavailable ({exc}); " + err).strip("; ")
+
+
+def _chromium_render_cli(url: str, slug: str) -> tuple[str, str, str]:
+    """Fallback: two cold Chromium runs, one for the DOM, one for the screenshot."""
     profile = tempfile.mkdtemp(prefix="lab-chrome-")
     shot = ARTIFACT_DIR / f"{slug}.png"
     base = [

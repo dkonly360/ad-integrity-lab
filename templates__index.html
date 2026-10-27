@@ -253,17 +253,26 @@ document.querySelectorAll("#nav button").forEach(b => b.onclick = () => {
 
 const badge = (cls, txt) => '<span class="badge ' + cls + '">' + esc(txt) + '</span>';
 
+// Small hosts render slowly: allow 15 minutes and ride out brief network blips.
 async function poll(id, stageEl, onStage) {
-  for (let i = 0; i < 200; i++) {
-    await new Promise(r => setTimeout(r, 1500));
-    const r = await fetch("/api/jobs/" + id);
-    if (!r.ok) throw new Error("job lookup failed");
+  const deadline = Date.now() + 15 * 60 * 1000;
+  let misses = 0;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 2000));
+    let r;
+    try { r = await fetch("/api/jobs/" + id); } catch (e) {
+      if (++misses > 10) throw new Error("lost connection to the server");
+      continue;
+    }
+    if (r.status === 404) throw new Error("the server restarted and this job was lost (free hosting sleeps or runs out of memory); please run it again");
+    if (!r.ok) { if (++misses > 10) throw new Error("job lookup failed (" + r.status + ")"); continue; }
+    misses = 0;
     const j = await r.json();
-    if (j.stage && onStage) onStage(j.stage);
+    if (j.stage && onStage) onStage(j.stage + (j.elapsed != null ? " · " + j.elapsed + "s" : ""));
     if (j.status === "done") return j.result;
     if (j.status === "error") throw new Error(j.error || "job failed");
   }
-  throw new Error("timed out");
+  throw new Error("timed out after 15 minutes");
 }
 
 const riskCls = (r) => r === "high" ? "b-high" : r === "elevated" ? "b-elev" : r === "possible" ? "b-info" : "b-ok";

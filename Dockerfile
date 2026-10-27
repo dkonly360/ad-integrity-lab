@@ -9,11 +9,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV CHROME_BIN=/usr/bin/chromium \
     PYTHONUNBUFFERED=1 \
-    PORT=8080
+    PORT=8080 \
+    OMP_THREAD_LIMIT=1 \
+    LAB_PAGES_PER_BROWSER=1
 
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Playwright's lightweight headless Chromium shell. LAB_PAGES_PER_BROWSER=1
+# (set above) restarts it per page so a 512 MB instance stays under its cap.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN playwright install --with-deps --only-shell chromium
 
 COPY . .
 # Files are stored flat in the repo (web upload); rebuild the package layout.

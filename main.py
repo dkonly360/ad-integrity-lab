@@ -148,11 +148,18 @@ async def vectors():
 # jobs
 # --------------------------------------------------------------------------
 
+def _stage(job_id: str, msg: str) -> None:
+    job = JOBS.get(job_id)
+    if job is not None:
+        job["stage"] = msg
+
+
 async def _run_scan(job_id: str, url: str) -> None:
     JOBS[job_id]["status"] = "running"
-    JOBS[job_id]["stage"] = "rendering target"
+    JOBS[job_id]["stage"] = "queued: waiting for the browser"
     try:
         async with _CAPTURE_SEM:
+            JOBS[job_id]["stage"] = "rendering target"
             cap = await capture(url, want_ocr=True)
             JOBS[job_id]["stage"] = "scoring policy signals"
             result = scan_dict(cap)
@@ -169,9 +176,10 @@ async def _run_scan(job_id: str, url: str) -> None:
 
 async def _run_canvas(job_id: str, url: str) -> None:
     JOBS[job_id]["status"] = "running"
-    JOBS[job_id]["stage"] = "rendering target"
+    JOBS[job_id]["stage"] = "queued: waiting for the browser"
     try:
         async with _CAPTURE_SEM:
+            JOBS[job_id]["stage"] = "rendering target"
             cap = await capture(url, want_ocr=True)
             JOBS[job_id]["stage"] = "building canvas clones"
             scan_data = scan_dict(cap)
@@ -182,7 +190,8 @@ async def _run_canvas(job_id: str, url: str) -> None:
                         terms.append(h["term"])
             terms = terms[:10] or ["visa"]
             JOBS[job_id]["stage"] = "measuring DOM vs OCR channels"
-            exp = await asyncio.to_thread(run_experiment, cap, terms)
+            exp = await asyncio.to_thread(run_experiment, cap, terms,
+                                          lambda m: _stage(job_id, m))
         result = {
             "url": cap.final_url or url,
             "terms": exp.terms,
@@ -247,7 +256,7 @@ async def job_status(job_id: str):
     job = JOBS.get(job_id)
     if not job:
         raise HTTPException(404, "Unknown or expired job.")
-    return job
+    return {**job, "elapsed": round(time.time() - job.get("created", time.time()))}
 
 
 # --------------------------------------------------------------------------

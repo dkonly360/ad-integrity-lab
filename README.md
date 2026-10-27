@@ -15,12 +15,14 @@ the UI, and every run is written to an experiment log with its inputs and outcom
 ## Live
 
 ```
-https://bubble-object-diff-sys.trycloudflare.com
+https://ad-integrity-lab.onrender.com
 ```
 
-The tunnel is an ephemeral Cloudflare quick tunnel tied to the host that started it.
-For a durable deployment use the Dockerfile below on any small VM (or Fly.io /
-Render / Cloud Run). Nothing in the app depends on the tunnel.
+Hosted on Render's free plan (0.1 vCPU, 512 MB). The instance sleeps after ~15 minutes
+idle, so the first request can take about a minute. Pages are rendered by one shared
+Playwright headless Chromium instead of a cold Chromium per step; with
+`LAB_PAGES_PER_BROWSER=1` it exits after each page so Tesseract never competes with it
+for memory.
 
 ---
 
