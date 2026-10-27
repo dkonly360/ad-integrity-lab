@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ad Integrity Lab — policy, canvas & conversion-signal testing</title>
+<style>
+  :root{
+    --bg:#0a0e17; --panel:#111827; --panel2:#0f1626; --line:#1f2937;
+    --txt:#e5e7eb; --muted:#8b98ad; --accent:#22d3ee; --accent2:#38bdf8;
+    --red:#f87171; --amber:#fbbf24; --green:#34d399; --violet:#a78bfa;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--accent2)}
+  header{border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0d1420,#0a0e17);
+         position:sticky;top:0;z-index:50}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px}
+  .top{display:flex;align-items:center;gap:14px;padding:16px 0 0}
+  .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--violet));
+        display:grid;place-items:center;font-weight:800;color:#06121a;font-size:14px}
+  h1{font-size:17px;margin:0;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:12.5px;margin-left:auto;text-align:right}
+  nav{display:flex;gap:4px;margin-top:14px;overflow-x:auto}
+  nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);
+             padding:10px 14px;font-size:13.5px;cursor:pointer;white-space:nowrap}
+  nav button.on{color:var(--txt);border-bottom-color:var(--accent)}
+  main{padding:26px 0 70px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px}
+  .card h2{font-size:15px;margin:0 0 4px;letter-spacing:.2px}
+  .card p.hint{color:var(--muted);font-size:12.8px;margin:0 0 16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  input,select,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+        border-radius:9px;padding:11px 13px;font-size:14px;font-family:inherit;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+  input[type=url],input[type=text]{flex:1;min-width:240px}
+  textarea{width:100%;resize:vertical;min-height:96px;font-family:var(--mono);font-size:13px}
+  .btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#04202a;border:0;
+       border-radius:9px;padding:11px 20px;font-weight:700;font-size:13.5px;cursor:pointer}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);font-weight:600}
+  .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;
+         letter-spacing:.3px;text-transform:uppercase}
+  .b-high{background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.35)}
+  .b-elev{background:rgba(251,191,36,.13);color:var(--amber);border:1px solid rgba(251,191,36,.3)}
+  .b-ok{background:rgba(52,211,153,.13);color:var(--green);border:1px solid rgba(52,211,153,.3)}
+  .b-info{background:rgba(56,189,248,.13);color:var(--accent2);border:1px solid rgba(56,189,248,.3)}
+  .b-mute{background:#18202f;color:var(--muted);border:1px solid var(--line)}
+  .grid{display:grid;gap:14px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:820px){.g2,.g3,.g4{grid-template-columns:1fr}}
+  .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .kpi .l{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.6px}
+  .kpi .v{font-size:24px;font-weight:750;margin-top:4px;font-variant-numeric:tabular-nums}
+  .kpi .n{color:var(--muted);font-size:11.5px;margin-top:2px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;
+     letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px;border-bottom:1px solid #171f2e;vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  code,.mono{font-family:var(--mono);font-size:12.5px}
+  .bar{height:7px;border-radius:4px;background:#18202f;overflow:hidden;margin-top:6px}
+  .bar > i{display:block;height:100%;border-radius:4px}
+  .chan{display:grid;grid-template-columns:130px 1fr 90px;gap:10px;align-items:center;
+        padding:9px 0;border-bottom:1px solid #171f2e}
+  .chan:last-child{border-bottom:0}
+  .prog{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px}
+  .spin{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);
+        border-radius:50%;animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .pill{font-family:var(--mono);font-size:11.5px;background:#18202f;border:1px solid var(--line);
+        padding:2px 7px;border-radius:6px;color:var(--muted);display:inline-block}
+  .note{color:var(--muted);font-size:12.5px;border-left:2px solid var(--line);padding-left:12px;margin-top:12px}
+  .warnbox{background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);color:#fde68a;
+           border-radius:10px;padding:12px 14px;font-size:13px;margin-top:12px}
+  .errbox{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);color:#fecaca;
+          border-radius:10px;padding:12px 14px;font-size:13px}
+  .hl{cursor:pointer;border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:13px;
+      background:var(--panel2);display:flex;justify-content:space-between;gap:8px}
+  .hl:hover{border-color:var(--accent)}
+  .hl.over{border-color:rgba(248,113,113,.5)}
+  .tiny{font-size:11.5px;color:var(--muted)}
+  .thumb{width:100%;border-radius:10px;border:1px solid var(--line);background:#000}
+  footer{border-top:1px solid var(--line);color:var(--muted);font-size:12px;padding:18px 0 40px}
+  .slider{display:flex;align-items:center;gap:12px;margin:10px 0}
+  .slider input[type=range]{flex:1;accent-color:var(--accent)}
+  .slider .sv{font-family:var(--mono);min-width:64px;text-align:right;font-size:13px}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <div class="logo">AI</div>
+      <h1>Ad Integrity Lab</h1>
+      <div class="sub">landing-page policy · canvas evasion test · ad copy · conversion-signal integrity</div>
+    </div>
+    <nav id="nav">
+      <button data-t="scan" class="on">Policy scan</button>
+      <button data-t="canvas">Canvas lab</button>
+      <button data-t="copy">Ad copy</button>
+      <button data-t="conv">Conversions</button>
+      <button data-t="log">Experiment log</button>
+      <button data-t="about">Method</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ============ SCAN ============ -->
+<section id="t-scan">
+  <div class="card">
+    <h2>Scan a landing page</h2>
+    <p class="hint">Renders the page in headless Chromium, then scores it against restricted-category policy. Shows which evidence channel still sees the trigger words.</p>
+    <div class="row">
+      <input type="url" id="scanUrl" placeholder="https://example.com/landing-page" value="https://www.ivisa.com/">
+      <button class="btn" id="scanBtn">Run scan</button>
+    </div>
+    <div id="scanProg" class="prog hide" style="margin-top:14px"><div class="spin"></div><span id="scanStage">queued…</span></div>
+    <div id="scanErr"></div>
+  </div>
+  <div id="scanOut"></div>
+</section>
+
+<!-- ============ CANVAS ============ -->
+<section id="t-canvas" class="hide">
+  <div class="card">
+    <h2>Canvas lab</h2>
+    <p class="hint">Converts the page into canvas-only clones (pixels → canvas, and text-nodes → canvas), then measures what each evidence channel can still read.</p>
+    <div class="row">
+      <input type="url" id="cvUrl" placeholder="https://example.com" value="https://www.ivisa.com/">
+      <button class="btn" id="cvBtn">Build &amp; measure</button>
+    </div>
+    <div id="cvProg" class="prog hide" style="margin-top:14px"><div class="spin"></div><span id="cvStage">queued…</span></div>
+    <div id="cvErr"></div>
+    <div class="note">This is an offensive build plus the defensive measurement. The clones are real, downloadable artifacts; the numbers say whether the technique actually helps.</div>
+  </div>
+  <div id="cvOut"></div>
+</section>
+
+<!-- ============ COPY ============ -->
+<section id="t-copy" class="hide">
+  <div class="card">
+    <h2>Rewrite restricted ad text</h2>
+    <p class="hint">Swaps restricted vocabulary for compliant wording and grades how far the claim moved. Drift that the landing page does not support is flagged, not hidden.</p>
+    <textarea id="copyIn">Get your visa in 7 days. 100% approval guaranteed! Official visa portal with best price.</textarea>
+    <div class="row" style="margin-top:12px">
+      <select id="copyV">
+        {% for v in verticals %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}
+      </select>
+      <button class="btn" id="copyBtn">Rewrite</button>
+    </div>
+    <div id="copyOut"></div>
+  </div>
+
+  <div class="card">
+    <h2>Responsive Search Ad set</h2>
+    <p class="hint">Generates 15 headlines (≤30 chars), 4 descriptions (≤90 chars) and 2 paths, with lint and a pre-submission checklist.</p>
+    <div class="row">
+      <select id="rsaV">
+        {% for v in verticals %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}
+      </select>
+      <input type="text" id="rsaGeo" placeholder="Geo (e.g. UAE)" value="UAE" style="flex:0 1 160px">
+      <input type="text" id="rsaBrand" placeholder="Brand" value="Gulf Entry" style="flex:0 1 180px">
+      <button class="btn" id="rsaBtn">Generate</button>
+    </div>
+    <div id="rsaOut"></div>
+  </div>
+</section>
+
+<!-- ============ CONVERSIONS ============ -->
+<section id="t-conv" class="hide">
+  <div class="card">
+    <h2>Conversion-signal integrity</h2>
+    <p class="hint">Target-CPA bidding learns from conversion signals. This models what happens when those signals are poisoned, and what changes when verification or value-based bidding is in place.</p>
+    <div class="slider"><span class="tiny" style="min-width:150px">Fake-conversion rate</span>
+      <input type="range" id="cInj" min="0" max="1.5" step="0.05" value="0.4"><span class="sv" id="cInjV">0.40×</span></div>
+    <div class="slider"><span class="tiny" style="min-width:150px">Verification / dedup</span>
+      <input type="range" id="cDed" min="0" max="1" step="0.05" value="0"><span class="sv" id="cDedV">0%</span></div>
+    <div class="slider"><span class="tiny" style="min-width:150px">Bidding signal</span>
+      <select id="cBid" style="flex:0 1 220px">
+        <option value="count">count-based (tCPA)</option>
+        <option value="value">value-based (tROAS style)</option>
+      </select>
+      <button class="btn" id="convBtn" style="margin-left:auto">Simulate</button>
+    </div>
+    <div id="convOut"></div>
+  </div>
+</section>
+
+<!-- ============ LOG ============ -->
+<section id="t-log" class="hide">
+  <div class="card">
+    <h2>Experiment log</h2>
+    <p class="hint">Every run is recorded with its inputs and outcome, so a claim can be traced back to the run that produced it.</p>
+    <button class="btn ghost" id="logBtn">Refresh</button>
+    <div id="logOut" style="margin-top:14px"></div>
+  </div>
+</section>
+
+<!-- ============ ABOUT ============ -->
+<section id="t-about" class="hide">
+  <div class="card">
+    <h2>Method and limits</h2>
+    <p class="hint">What this lab measures, and what it deliberately does not claim.</p>
+    <div class="grid g2">
+      <div>
+        <h3 style="font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)">Three evidence channels</h3>
+        <ul style="font-size:13.5px;line-height:1.75;padding-left:18px">
+          <li><b>Server</b> — HTML as served to a Googlebot user-agent, no JS.</li>
+          <li><b>DOM</b> — text after JavaScript runs, which is what a rendered crawl sees.</li>
+          <li><b>OCR</b> — screenshot read by Tesseract, which is what a vision reviewer sees.</li>
+        </ul>
+        <p class="note">A technique can win the first two and still lose the third. That is the finding, not an opinion.</p>
+      </div>
+      <div>
+        <h3 style="font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)">What stays out of scope</h3>
+        <ul style="font-size:13.5px;line-height:1.75;padding-left:18px">
+          <li>No advertisements are served, and no account is ever submitted.</li>
+          <li>Clones are inert snapshots served with a sandbox policy.</li>
+          <li>The conversion module is a model, not a measurement of a live account.</li>
+          <li>Private and reserved addresses are refused, so the lab cannot be used as an SSRF pivot.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="warnbox">
+      Hiding content from a review system is itself a policy violation regardless of whether the content is compliant.
+      The lab exists to measure that trade-off, and its own numbers show the text-channel win does not survive vision review.
+    </div>
+  </div>
+</section>
+
+<footer><div class="wrap">Ad Integrity Lab · built as an applied-research artifact for ad-spam and conversion-integrity work · runs headless Chromium + Tesseract server-side</div></footer>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (n, d) => (n === null || n === undefined) ? "—" : Number(n).toLocaleString(undefined, {maximumFractionDigits: d === undefined ? 2 : d});
+
+document.querySelectorAll("#nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#nav button").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+  ["scan","canvas","copy","conv","log","about"].forEach(t => $("#t-" + t).classList.toggle("hide", t !== b.dataset.t));
+  if (b.dataset.t === "log") loadLog();
+});
+
+const badge = (cls, txt) => '<span class="badge ' + cls + '">' + esc(txt) + '</span>';
+
+async function poll(id, stageEl, onStage) {
+  for (let i = 0; i < 200; i++) {
+    await new Promise(r => setTimeout(r, 1500));
+    const r = await fetch("/api/jobs/" + id);
+    if (!r.ok) throw new Error("job lookup failed");
+    const j = await r.json();
+    if (j.stage && onStage) onStage(j.stage);
+    if (j.status === "done") return j.result;
+    if (j.status === "error") throw new Error(j.error || "job failed");
+  }
+  throw new Error("timed out");
+}
+
+const riskCls = (r) => r === "high" ? "b-high" : r === "elevated" ? "b-elev" : r === "possible" ? "b-info" : "b-ok";
+
+/* ---------------- scan ---------------- */
+$("#scanBtn").onclick = async () => {
+  const url = $("#scanUrl").value.trim();
+  $("#scanErr").innerHTML = ""; $("#scanOut").innerHTML = "";
+  $("#scanProg").classList.remove("hide");
+  $("#scanBtn").disabled = true;
+  try {
+    const r = await fetch("/api/scan", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({url})});
+    if (!r.ok) throw new Error((await r.json()).detail || "request failed");
+    const {job} = await r.json();
+    const res = await poll(job, null, s => $("#scanStage").textContent = s);
+    renderScan(res);
+  } catch (e) {
+    $("#scanErr").innerHTML = '<div class="errbox">' + esc(e.message) + '</div>';
+  } finally {
+    $("#scanProg").classList.add("hide"); $("#scanBtn").disabled = false;
+  }
+};
+
+function renderScan(d) {
+  const c = d.cloaking || {};
+  const ch = d.channel_chars || {};
+  let h = '<div class="card"><h2>Verdict</h2>';
+  h += '<div class="row" style="align-items:center;gap:12px;margin:8px 0 4px">';
+  h += d.primary ? badge("b-high", d.primary) : badge("b-ok", "no restricted vertical");
+  h += '<span class="pill">' + esc(d.final_url) + '</span>';
+  h += '<span class="pill">HTTP ' + esc(d.status) + '</span></div>';
+  h += '<p style="font-size:14px;margin:12px 0 0">' + esc(d.summary) + '</p>';
+  h += '</div>';
+
+  h += '<div class="grid g3">';
+  h += kpi("DOM text", num(ch.dom, 0), "chars after JS runs");
+  h += kpi("OCR text", num(ch.ocr, 0), "chars a vision reviewer reads");
+  h += kpi("Server HTML", num(ch.server, 0), "chars without JS");
+  h += '</div>';
+
+  if (d.verticals && d.verticals.length) {
+    h += '<div class="card"><h2>Restricted-category signals</h2><p class="hint">Weighted by where the term appears: title and H1 count most.</p>';
+    d.verticals.forEach(v => {
+      const pct = Math.min(100, Math.round(v.score / 80 * 100));
+      const col = v.risk === "high" ? "#f87171" : v.risk === "elevated" ? "#fbbf24" : v.risk === "possible" ? "#38bdf8" : "#34d399";
+      h += '<div style="margin-bottom:14px">';
+      h += '<div class="row" style="justify-content:space-between;align-items:center">';
+      h += '<div><b style="font-size:13.5px">' + esc(v.name) + '</b> <span class="tiny">' + esc(v.policy) + '</span></div>';
+      h += '<div>' + badge(riskCls(v.risk), v.risk) + ' <span class="pill">score ' + v.score + '</span></div></div>';
+      h += '<div class="bar"><i style="width:' + pct + '%;background:' + col + '"></i></div>';
+      h += '<div class="tiny" style="margin-top:6px">gate: ' + esc(v.gate) + '</div>';
+      if (v.hits && v.hits.length) {
+        h += '<div class="row" style="margin-top:8px">';
+        v.hits.slice(0, 6).forEach(x => h += '<span class="pill">' + esc(x.term) + ' ×' + x.count + ' <span style="color:#334155">·</span> ' + esc(x.where) + '</span>');
+        h += '</div>';
+      }
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
+  if (d.verticals && d.verticals.length) {
+    h += '<div class="card"><h2>Channel detectability</h2><p class="hint">Which evidence channel still catches the restricted vocabulary for the primary vertical.</p>';
+    const v = d.verticals[0];
+    const rows = [["Server HTML", "server"], ["Rendered DOM", "dom"], ["Vision / OCR", "ocr"]];
+    rows.forEach(([label, key]) => {
+      const ok = v.channels && v.channels[key];
+      h += '<div class="chan"><div>' + esc(label) + '</div>';
+      h += '<div><div class="bar"><i style="width:' + (ok ? 100 : 6) + '%;background:' + (ok ? "#34d399" : "#334155") + '"></i></div></div>';
+      h += '<div style="text-align:right">' + (ok ? badge("b-high", "detected") : badge("b-mute", "blind")) + '</div></div>';
+    });
+    h += '<div class="note">"Blind" only means the terms were not present in the text this channel reads. It is not a compliance result.</div></div>';
+  }
+
+  h += '<div class="card"><h2>Cloaking check</h2><p class="hint">Same URL fetched as a normal browser and as Googlebot, then compared.</p>';
+  if (c.available) {
+    h += '<div class="row" style="gap:14px"><span class="pill">jaccard ' + esc(c.jaccard) + '</span>';
+    h += '<span class="pill">suspicion ' + esc(c.suspicion) + '/100</span>';
+    h += '<span class="pill">bytes human ' + num(c.bytes_human, 0) + ' / bot ' + num(c.bytes_bot, 0) + '</span></div>';
+    h += '<p style="margin:10px 0 0;font-size:13.5px">' + esc(c.verdict) + '</p>';
+    if (c.hidden_from_bot && c.hidden_from_bot.length) h += '<div class="warnbox">Markers a human is shown but Googlebot is not: <b>' + esc(c.hidden_from_bot.join(", ")) + '</b></div>';
+    if (c.only_human && c.only_human.length) h += '<div class="tiny" style="margin-top:8px">Tokens only in the human view: ' + esc(c.only_human.slice(0, 12).join(", ")) + '</div>';
+  } else {
+    h += '<p class="tiny">' + esc(c.reason || "not available for this target") + '</p>';
+  }
+  h += '</div>';
+
+  if (d.recommended_gate_actions && d.recommended_gate_actions.length) {
+    h += '<div class="card"><h2>What actually gets this approved</h2><p class="hint">The documentation gate, not the wording.</p><ol style="font-size:13.5px;line-height:1.9;padding-left:18px">';
+    d.recommended_gate_actions.forEach(a => h += '<li>' + esc(a) + '</li>');
+    h += '</ol></div>';
+  }
+
+  if (d.screenshot_name) {
+    h += '<div class="card"><h2>Captured viewport</h2><img class="thumb" src="/artifacts/' + esc(d.screenshot_name) + '" alt="screenshot"></div>';
+  }
+  $("#scanOut").innerHTML = h;
+}
+
+const kpi = (l, v, n) => '<div class="kpi"><div class="l">' + esc(l) + '</div><div class="v">' + v + '</div><div class="n">' + esc(n || "") + '</div></div>';
+
+/* ---------------- canvas ---------------- */
+$("#cvBtn").onclick = async () => {
+  const url = $("#cvUrl").value.trim();
+  $("#cvErr").innerHTML = ""; $("#cvOut").innerHTML = "";
+  $("#cvProg").classList.remove("hide"); $("#cvBtn").disabled = true;
+  try {
+    const r = await fetch("/api/canvas", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({url})});
+    if (!r.ok) throw new Error((await r.json()).detail || "request failed");
+    const {job} = await r.json();
+    const res = await poll(job, null, s => $("#cvStage").textContent = s);
+    renderCanvas(res);
+  } catch (e) {
+    $("#cvErr").innerHTML = '<div class="errbox">' + esc(e.message) + '</div>';
+  } finally {
+    $("#cvProg").classList.add("hide"); $("#cvBtn").disabled = false;
+  }
+};
+
+function renderCanvas(d) {
+  const n = d.numbers || {};
+  let h = '<div class="card"><h2>Result</h2>';
+  h += '<p style="font-size:14px;margin:6px 0 14px">' + esc(d.verdict) + '</p>';
+  h += '<div class="grid g4">';
+  h += kpi("Visible text before", num(n.inner_chars_before, 0), "chars in the rendered DOM");
+  h += kpi("Visible text after", num(n.inner_chars_after_image, 0), "chars left in the image clone");
+  h += kpi("OCR after", num(n.ocr_chars_after, 0), "chars still readable");
+  h += kpi("Terms caught by OCR", Math.round((n.ocr_survival_after || 0) * 100) + "%", "of the trigger list");
+  h += '</div>';
+  h += '<table style="margin-top:16px"><thead><tr><th>Channel</th><th>Original</th><th>Image clone</th><th>Text clone</th></tr></thead><tbody>';
+  h += '<tr><td>Visible DOM text</td><td>' + num(n.inner_chars_before, 0) + ' chars</td><td>' + num(n.inner_chars_after_image, 0) + ' chars</td><td>' + num(n.inner_chars_after_text, 0) + ' chars</td></tr>';
+  h += '<tr><td>Trigger terms via DOM</td><td>' + Math.round((n.dom_survival_before || 0) * 100) + '%</td><td>' + Math.round((n.dom_survival_after || 0) * 100) + '%</td><td>' + Math.round((n.text_mode_dom_survival || 0) * 100) + '%</td></tr>';
+  h += '<tr><td>Trigger terms via OCR</td><td>' + Math.round(((d.baseline || {}).by_ocr || {}).survival * 100 || 0) + '%</td><td>' + Math.round((n.ocr_survival_after || 0) * 100) + '%</td><td>' + Math.round((n.text_mode_ocr_survival || 0) * 100) + '%</td></tr>';
+  h += '</tbody></table>';
+  h += '<div class="row" style="margin-top:14px">' + (d.terms || []).map(t => '<span class="pill">' + esc(t) + '</span>').join("") + '</div>';
+  h += '</div>';
+
+  const arts = d.artifacts || [];
+  h += '<div class="grid g2">';
+  h += '<div class="card"><h2>Image clone</h2><p class="hint">Pixels replayed into a canvas. Every text node is gone.</p>';
+  if (d.image_mode && d.image_mode.path) {
+    const name = d.image_mode.path.split("/").pop();
+    h += '<div class="row"><a class="btn ghost" href="/artifacts/' + esc(name) + '" target="_blank" rel="noopener">Open clone</a>';
+    h += '<span class="pill">' + num(d.image_mode.bytes, 0) + ' bytes</span></div>';
+  }
+  if (d.image_mode && d.image_mode.error) h += '<div class="errbox" style="margin-top:10px">' + esc(d.image_mode.error) + '</div>';
+  h += '<div class="tiny" style="margin-top:10px">' + esc((d.image_mode || {}).note || "") + '</div>';
+  const shot = arts.find(a => a.indexOf("-img") > -1 && a.indexOf("clone") > -1);
+  if (shot) h += '<img class="thumb" style="margin-top:12px" src="/artifacts/' + esc(shot) + '" alt="clone render">';
+  h += '</div>';
+
+  h += '<div class="card"><h2>Text-node clone</h2><p class="hint">Each text node redrawn with its computed font, then deleted from the DOM.</p>';
+  if (d.text_mode && d.text_mode.path) {
+    const name = d.text_mode.path.split("/").pop();
+    h += '<div class="row"><a class="btn ghost" href="/artifacts/' + esc(name) + '" target="_blank" rel="noopener">Open clone</a>';
+    h += '<span class="pill">' + num(d.text_mode.bytes, 0) + ' bytes</span></div>';
+  }
+  if (d.text_mode && d.text_mode.diag) {
+    const g = d.text_mode.diag;
+    h += '<div class="row" style="margin-top:10px">';
+    h += '<span class="pill">nodes ' + esc(g["data-cv-nodes"] || "0") + '</span>';
+    h += '<span class="pill">stripped ' + esc(g["data-cv-stripped"] || "0") + '</span>';
+    h += '<span class="pill">innerText ' + esc(g["data-cv-inner"] || "?") + '</span></div>';
+  }
+  h += '<div class="tiny" style="margin-top:10px">' + esc((d.text_mode || {}).note || "") + '</div>';
+  h += '</div></div>';
+
+  h += '<div class="card"><h2>Why this is not a bypass</h2>';
+  h += '<p style="font-size:13.5px;margin:0 0 10px">The canvas removes text from the DOM, which is a real and measurable effect. It does not remove text from the page. A screenshot of the same clone is read by OCR at the same rate as the original, and a restricted vertical is still visible to a human reviewer.</p>';
+  h += '<div class="warnbox">Hiding content from a review system is a circumventing-systems violation in its own right, independent of whether the underlying content is compliant. The measured benefit does not justify the risk it creates.</div></div>';
+  $("#cvOut").innerHTML = h;
+}
+
+/* ---------------- copy ---------------- */
+$("#copyBtn").onclick = async () => {
+  const body = {text: $("#copyIn").value, vertical: $("#copyV").value};
+  $("#copyOut").innerHTML = '<div class="prog" style="margin-top:12px"><div class="spin"></div><span>rewriting…</span></div>';
+  try {
+    const r = await fetch("/api/copy", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    const d = await r.json();
+    let h = '<table style="margin-top:14px"><thead><tr><th>Original</th><th>Compliant rewrite</th></tr></thead><tbody>';
+    h += '<tr><td class="mono">' + esc(d.original) + '</td><td class="mono">' + esc(d.rewritten) + '</td></tr></tbody></table>';
+    h += '<div class="row" style="margin-top:12px">' + badge(d.risk === "high" ? "b-high" : d.risk === "medium" ? "b-elev" : "b-ok", "drift: " + d.risk) + '</div>';
+    if (d.applied && d.applied.length) {
+      h += '<table style="margin-top:14px"><thead><tr><th>Term</th><th>Replaced with</th><th>Risk</th><th>Why</th></tr></thead><tbody>';
+      d.applied.forEach(a => h += '<tr><td class="mono">' + esc(a.pattern) + '</td><td class="mono">' + esc(a.replacement) + '</td><td>' + badge(a.risk === "high" ? "b-high" : a.risk === "medium" ? "b-elev" : "b-ok", a.risk) + '</td><td class="tiny">' + esc(a.why) + '</td></tr>');
+      h += '</tbody></table>';
+    }
+    if (d.lint_after && d.lint_after.length) {
+      h += '<div class="warnbox"><b>Still flagged after rewriting:</b> ' + d.lint_after.map(l => esc(l.label)).join(", ") + '</div>';
+    }
+    (d.warnings || []).forEach(w => h += '<div class="note">' + esc(w) + '</div>');
+    $("#copyOut").innerHTML = h;
+  } catch (e) { $("#copyOut").innerHTML = '<div class="errbox">' + esc(e.message) + '</div>'; }
+};
+
+$("#rsaBtn").onclick = async () => {
+  const body = {vertical: $("#rsaV").value, geo: $("#rsaGeo").value, brand: $("#rsaBrand").value};
+  $("#rsaOut").innerHTML = '<div class="prog" style="margin-top:12px"><div class="spin"></div><span>generating…</span></div>';
+  try {
+    const r = await fetch("/api/rsa", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    const d = await r.json();
+    let h = '<div class="row" style="margin-top:14px">' + badge("b-info", d.vertical_name) + '<span class="pill">' + esc(d.policy) + '</span></div>';
+    h += '<div class="row" style="margin-top:10px">' + badge("b-elev", d.gate) + '</div>';
+    h += '<h3 style="font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:18px 0 8px">Headlines · 15 · max 30 chars</h3><div class="grid g3">';
+    d.headlines.forEach(x => h += '<div class="hl ' + (x.ok ? "" : "over") + '"><span class="mono">' + esc(x.text) + '</span><span class="tiny">' + x.length + '</span></div>');
+    h += '</div><h3 style="font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:18px 0 8px">Descriptions · 4 · max 90 chars</h3>';
+    d.descriptions.forEach(x => h += '<div class="hl" style="margin-bottom:8px"><span class="mono">' + esc(x.text) + '</span><span class="tiny">' + x.length + '</span></div>');
+    h += '<div class="row" style="margin-top:12px">' + d.paths.map(p => '<span class="pill">/' + esc(p.text) + '</span>').join("") + '</div>';
+    if (d.lint && d.lint.length) h += '<div class="warnbox" style="margin-top:14px"><b>Lint:</b> ' + d.lint.map(l => esc(l.asset + " — " + l.rule)).join(" · ") + '</div>';
+    h += '<h3 style="font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:18px 0 8px">Pre-submission checklist</h3><ol style="font-size:13.5px;line-height:1.9;padding-left:18px">';
+    d.checklist.forEach(c => h += '<li>' + esc(c) + '</li>');
+    h += '</ol>';
+    $("#rsaOut").innerHTML = h;
+  } catch (e) { $("#rsaOut").innerHTML = '<div class="errbox">' + esc(e.message) + '</div>'; }
+};
+
+/* ---------------- conversions ---------------- */
+const bindSlider = (id, fmt) => {
+  const el = $(id), out = $(id + "V");
+  const upd = () => out.textContent = fmt(el.value);
+  el.oninput = upd; upd();
+};
+bindSlider("#cInj", v => Number(v).toFixed(2) + "×");
+bindSlider("#cDed", v => Math.round(v * 100) + "%");
+
+async function runConv() {
+  const body = {
+    injection_rate: Number($("#cInj").value),
+    dedup_effectiveness: Number($("#cDed").value),
+    value_based: $("#cBid").value === "value"
+  };
+  $("#convOut").innerHTML = '<div class="prog" style="margin-top:14px"><div class="spin"></div><span>simulating…</span></div>';
+  try {
+    const r = await fetch("/api/conversions", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    renderConv(await r.json());
+  } catch (e) { $("#convOut").innerHTML = '<div class="errbox">' + esc(e.message) + '</div>'; }
+}
+$("#convBtn").onclick = runConv;
+
+function renderConv(d) {
+  const t = d.totals, b = d.budget_shift;
+  let h = '<div class="grid g4" style="margin-top:16px">';
+  h += kpi("Reported CPA", "$" + num(t.reported_cpa), "what the dashboard shows");
+  h += kpi("True CPA", "$" + num(t.true_cpa), "spend ÷ paying conversions");
+  h += kpi("Distortion", num(t.cpa_distortion) + "×", "true ÷ reported");
+  h += kpi("True ROAS", num(t.true_roas), "revenue ÷ spend");
+  h += '</div>';
+  h += '<p style="font-size:14px;margin:16px 0 0">' + esc(d.verdict) + '</p>';
+  h += '<div class="grid g2" style="margin-top:16px">';
+  h += kpi("Zero-value budget share", Math.round((b.zero_value_share_round2 || 0) * 100) + "%", "round 2, after learning (" + (b.delta_points > 0 ? "+" : "") + b.delta_points + " pts vs round 1)");
+  h += kpi("Fake conversions counted", num(t.fake_conversions_counted, 0), "survived verification");
+  h += '</div>';
+  h += '<table style="margin-top:18px"><thead><tr><th>Segment</th><th>Impressions</th><th>True conv</th><th>Fake counted</th><th>True value</th><th>Bid</th><th>Round-2 budget</th></tr></thead><tbody>';
+  (d.segments || []).forEach(s => {
+    h += '<tr><td>' + esc(s.segment) + (s.zero_value ? ' ' + badge("b-high", "zero value") : "") + '</td>';
+    h += '<td>' + num(s.impressions, 0) + '</td><td>' + num(s.true_conversions, 0) + '</td>';
+    h += '<td>' + num(s.fake_conversions_counted, 0) + '</td><td>$' + num(s.true_value, 0) + '</td>';
+    h += '<td class="mono">' + num(s.bid, 3) + '</td><td>' + Math.round((s.budget_share_round2 || 0) * 100) + '%</td></tr>';
+  });
+  h += '</tbody></table>';
+  (d.notes || []).forEach(n => h += '<div class="note">' + esc(n) + '</div>');
+  h += '<h3 style="font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:20px 0 8px">Tamper vectors and their tells</h3>';
+  h += '<table><thead><tr><th>Vector</th><th>Mechanic</th><th>Detection</th></tr></thead><tbody>';
+  (d.vectors || []).forEach(v => h += '<tr><td><b>' + esc(v.name) + '</b></td><td class="tiny">' + esc(v.mechanic) + '<br><span style="color:var(--green)">fix: ' + esc(v.fix) + '</span></td><td class="tiny">' + esc(v.tell) + '</td></tr>');
+  h += '</tbody></table>';
+  $("#convOut").innerHTML = h;
+}
+
+/* ---------------- log ---------------- */
+async function loadLog() {
+  $("#logOut").innerHTML = '<div class="prog"><div class="spin"></div><span>loading…</span></div>';
+  try {
+    const r = await fetch("/api/experiments");
+    const rows = await r.json();
+    if (!rows.length) { $("#logOut").innerHTML = '<p class="tiny">No runs yet. Start with a policy scan.</p>'; return; }
+    let h = '<table><thead><tr><th>When</th><th>Kind</th><th>Target / input</th><th>Outcome</th></tr></thead><tbody>';
+    rows.forEach(x => {
+      let target = x.url || x.vertical || x.inputs && JSON.stringify(x.inputs).slice(0, 60) || "—";
+      let out = x.verdict || (x.totals ? ("true CPA $" + num(x.totals.true_cpa) + " vs reported $" + num(x.totals.reported_cpa)) : "—");
+      h += '<tr><td class="tiny mono">' + esc(x.ts || "") + '</td><td>' + esc(x.kind || "") + '</td><td class="tiny">' + esc(target) + '</td><td class="tiny">' + esc(out) + '</td></tr>';
+    });
+    h += '</tbody></table>';
+    $("#logOut").innerHTML = h;
+  } catch (e) { $("#logOut").innerHTML = '<div class="errbox">' + esc(e.message) + '</div>'; }
+}
+$("#logBtn").onclick = loadLog;
+</script>
+</body>
+</html>
