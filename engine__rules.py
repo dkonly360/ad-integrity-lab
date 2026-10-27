@@ -263,8 +263,10 @@ SUBSTITUTIONS: dict[str, list[Sub]] = {
 GLOBAL_SUBS: list[Sub] = [
     Sub(r"\b100%\s?(approval|success|guaranteed)\b", "documents reviewed first", "low",
         "Removes an outcome guarantee that cannot be substantiated."),
-    Sub(r"\bguaranteed\b", "with upfront checks", "low",
-        "Guarantee language needs proof; this keeps the promise concrete."),
+    # Dropping the word keeps the sentence grammatical wherever it sits
+    # ("Guaranteed visa approval" -> "entry permit approval").
+    Sub(r"\bguaranteed\b\s*", "", "low",
+        "Guarantee language needs proof; the claim stands without it."),
     Sub(r"\bno\.?\s?1\b", "a trusted choice", "medium",
         "Ranking claims need third-party evidence."),
     Sub(r"\b(best|cheapest|fastest)\b", "a practical", "medium",

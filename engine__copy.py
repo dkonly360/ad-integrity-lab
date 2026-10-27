@@ -88,8 +88,11 @@ def apply_substitutions(text: str, vertical_id: str) -> tuple[str, list[Applied]
         new, n = re.subn(s.pattern, s.to, out, flags=re.IGNORECASE)
         if n:
             out = new
-            applied.append(Applied(pattern=_human(s.pattern), replacement=s.to,
+            applied.append(Applied(pattern=_human(s.pattern), replacement=s.to or "(removed)",
                                    risk=s.risk, why=s.why, count=n))
+    out = re.sub(r"[ \t]{2,}", " ", out).strip()
+    if out[:1].islower():
+        out = out[0].upper() + out[1:]
     return out, applied
 
 
